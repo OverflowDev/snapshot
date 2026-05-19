@@ -19,11 +19,48 @@ npm start
 | **Network** | Pre-fills the RPC URL. Pick *Other EVM Chain* for anything not listed |
 | **Token type** | ERC-20 (fungible), ERC-721 (NFT), ERC-1155 (multi-token), SPL, or Solana NFT |
 | **Contract / Mint address** | The token contract on EVM, or the mint address on Solana |
-| **RPC endpoint URL** | The JSON-RPC node to query. A free public RPC is pre-filled but a paid key (Alchemy / Infura) is faster and more reliable for large contracts |
+| **RPC endpoint URL** | The JSON-RPC node to query. A free no-key RPC is pre-filled (`ethereum.publicnode.com`). For large contracts a free Alchemy / Infura key is significantly faster |
 | **Snapshot block** | *(EVM only)* Read balances as of this block number. Leave blank to use the latest block. Requires an archive node for any past block |
 | **Scan from block** | *(EVM only)* Only scan Transfer events from this block onward. Set this to the contract's deployment block to skip millions of empty blocks and speed up the scan significantly |
 | **Token ID(s)** | *(ERC-1155 only)* Comma-separated list of token IDs to include. Leave blank to include all IDs |
 | **Output file** | Where to save the result. Use `.csv` or `.json` extension |
+
+## Finding the deployment block (important for speed)
+
+The **Scan from block** prompt is the single biggest lever for scan speed. Starting from block 0 means scanning the entire chain history — most of it empty — which can take 60–90 minutes. Starting from the contract's deployment block takes a few minutes at most.
+
+### On Etherscan (Ethereum, Base, Polygon, etc.)
+
+1. Go to `etherscan.io` (or `basescan.org`, `polygonscan.com`, etc.)
+2. Paste the contract address in the search bar
+3. Click the **Contract** tab → look for **"Contract Creator"** — the block number is shown there
+
+   Or: click the **Transactions** tab → sort oldest first → the very first row is the deployment transaction → click it → note the **Block** number
+
+4. Enter that block number as **Scan from block**
+
+### Example
+
+```
+Contract: 0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D  (Bored Ape Yacht Club)
+Deployed: block 12,287,507
+
+Without from-block:  scans 25,000,000 blocks  →  ~90 min on a free RPC
+With from-block:     scans    ~800,000 blocks  →  ~3 min on a free RPC
+```
+
+### Rough block number reference by year
+
+| Year | Approximate block range |
+|---|---|
+| 2020 | 9,200,000 – 11,600,000 |
+| 2021 | 11,600,000 – 13,900,000 |
+| 2022 | 13,900,000 – 16,300,000 |
+| 2023 | 16,300,000 – 18,900,000 |
+| 2024 | 18,900,000 – 21,600,000 |
+| 2025 | 21,600,000 + |
+
+If you don't know the exact block, pick the start of the year the contract launched — you'll skip the bulk of the empty history.
 
 ## RPC requirements
 
@@ -31,9 +68,26 @@ npm start
 |---|---|
 | ERC-20 / ERC-721 / ERC-1155 at latest block | Any public RPC |
 | ERC-20 / ERC-721 / ERC-1155 at a past block | **Archive node** (Alchemy, QuickNode, Infura) |
-| Large contracts (millions of transfers) | Paid RPC recommended — free RPCs cap block ranges per request |
+| Large contracts (millions of transfers) | Free key recommended — public RPCs cap block ranges per request |
 | Solana SPL token | Any Solana RPC |
 | Solana NFT collection | **DAS-compatible RPC** (Helius, QuickNode, Triton) |
+
+**Free no-key Ethereum RPCs** (no account required):
+
+| URL | Notes |
+|---|---|
+| `https://ethereum.publicnode.com` | Default. Generous limits, supports getLogs |
+| `https://1rpc.io/eth` | Privacy-focused |
+| `https://eth.drpc.org` | Decentralized RPC |
+| `https://cloudflare-eth.com` | Cloudflare-backed, no archive |
+
+**Free key RPCs** (create a free account):
+
+| Provider | URL format |
+|---|---|
+| Alchemy | `https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY` |
+| Infura | `https://mainnet.infura.io/v3/YOUR_KEY` |
+| QuickNode | endpoint from your dashboard |
 
 Set your RPC keys in a `.env` file (see `.env.example`):
 

@@ -1,20 +1,38 @@
 const progress = require('../utils/progress');
 
+function formatETA(seconds) {
+  if (!isFinite(seconds) || seconds < 0) return '...';
+  if (seconds < 60)  return `${Math.ceil(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.ceil(seconds % 60)}s`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
 async function getLogsChunked(provider, filter, fromBlock, toBlock, chunkSize = 2000) {
   const logs = [];
   let current = Number(fromBlock);
   const end = Number(toBlock);
+  const totalBlocks = end - current;
   let chunk = Number(chunkSize);
+  let blocksScanned = 0;
+  const startTime = Date.now();
 
   while (current <= end) {
     const chunkEnd = Math.min(current + chunk - 1, end);
+    const pct = totalBlocks > 0 ? ((blocksScanned / totalBlocks) * 100).toFixed(1) : '100';
+    const elapsed = (Date.now() - startTime) / 1000;
+    const rate = blocksScanned / (elapsed || 1);
+    const eta = rate > 0 ? formatETA((end - current) / rate) : '...';
+
     progress.tick(
-      `Scanning logs: ${current.toLocaleString()} → ${chunkEnd.toLocaleString()} / ${end.toLocaleString()}`
+      `Scanning logs: ${current.toLocaleString()} / ${end.toLocaleString()}  [${pct}%  ETA ${eta}]  events: ${logs.length.toLocaleString()}`
     );
 
     try {
       const result = await provider.getLogs({ ...filter, fromBlock: current, toBlock: chunkEnd });
       logs.push(...result);
+      blocksScanned += chunkEnd - current + 1;
       current = chunkEnd + 1;
     } catch (err) {
       if (chunk > 100 && (err.code === -32005 || /too many|block range|limit exceeded|log limit/i.test(err.message))) {

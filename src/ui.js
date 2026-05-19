@@ -11,7 +11,7 @@ const progress = require('./utils/progress');
 
 // Default public RPC per network (user should supply a paid key for production)
 const NETWORK_RPCS = {
-  ethereum:  process.env.EVM_RPC_URL || 'https://rpc.ankr.com/eth',
+  ethereum:  process.env.EVM_RPC_URL || 'https://ethereum.publicnode.com',
   base:      'https://mainnet.base.org',
   polygon:   'https://polygon-rpc.com',
   arbitrum:  'https://arb1.arbitrum.io/rpc',
@@ -76,9 +76,9 @@ async function promptEVM() {
     {
       type: 'input',
       name: 'rpc',
-      message: 'RPC endpoint URL ' + chalk.dim('(Alchemy/Infura recommended for large scans):'),
+      message: 'RPC endpoint URL ' + chalk.dim('(free: publicnode.com · 1rpc.io/eth · eth.drpc.org  |  free key: alchemy.com):'),
       default: answers => NETWORK_RPCS[answers.network] || '',
-      validate: v => v.trim().startsWith('http') || chalk.red('Enter a valid HTTP(S) RPC URL — e.g. https://rpc.ankr.com/eth or your Alchemy/Infura key'),
+      validate: v => v.trim().startsWith('http') || chalk.red('Enter a valid HTTP(S) RPC URL'),
       filter: v => v.trim(),
     },
     {
