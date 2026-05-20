@@ -1,5 +1,24 @@
 const progress = require('../utils/progress');
 
+async function getDeployBlock(provider, address, latestBlock) {
+  let lo = 0;
+  let hi = Number(latestBlock);
+  progress.info(`Auto-detecting deployment block via binary search (0 → ${hi.toLocaleString()})...`);
+
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const code = await provider.getCode(address, mid);
+    if (code && code !== '0x') {
+      hi = mid;
+    } else {
+      lo = mid + 1;
+    }
+  }
+
+  progress.info(`Contract deployed at block ${lo.toLocaleString()}`);
+  return lo;
+}
+
 function formatETA(seconds) {
   if (!isFinite(seconds) || seconds < 0) return '...';
   if (seconds < 60)  return `${Math.ceil(seconds)}s`;
@@ -67,4 +86,4 @@ async function batchCall(calls, batchSize = 50) {
   return results;
 }
 
-module.exports = { getLogsChunked, batchCall };
+module.exports = { getLogsChunked, batchCall, getDeployBlock };

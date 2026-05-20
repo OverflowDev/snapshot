@@ -2,14 +2,18 @@ const { ethers } = require('ethers');
 const { snapshotERC20 } = require('./erc20');
 const { snapshotERC721 } = require('./erc721');
 const { snapshotERC1155 } = require('./erc1155');
+const { getDeployBlock } = require('./helpers');
 
 async function snapshotEVM(options) {
   const provider = new ethers.JsonRpcProvider(options.rpc);
 
   const currentBlock = await provider.getBlockNumber();
   const block = options.block ? Number(options.block) : currentBlock;
-  const fromBlock = options.fromBlock ? Number(options.fromBlock) : 0;
   const chunkSize = options.chunkSize ? Number(options.chunkSize) : 2000;
+
+  const fromBlock = options.fromBlock && Number(options.fromBlock) !== 0
+    ? Number(options.fromBlock)
+    : await getDeployBlock(provider, options.contract, block);
 
   const network = await provider.getNetwork();
   console.log(`Network: ${network.name} (chainId ${network.chainId})`);
