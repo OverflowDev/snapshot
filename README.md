@@ -186,3 +186,75 @@ Any EVM-compatible chain works — just supply the correct RPC URL. Pre-configur
 - Optimism
 - BNB Chain
 - Avalanche C-Chain
+
+---
+
+## DEX Activity Snapshot
+
+Snapshot wallets that traded on a DEX pool and filter them by **swap count** and/or **trading volume**. Designed for **activity-based airdrops**: reward users who reached a threshold of engagement rather than just holding a token.
+
+### How it works
+
+1. **Snapshot block resolution** — supply a block number directly, or supply an ISO date/time (`--snapshot-time`) and the tool finds the exact block via binary search (~25 RPC calls).
+2. **Deployment block auto-detection** — the pool start block is found automatically so scanning starts exactly where the pool was created, not from block 0.
+3. **Event scanning** — all `Swap` events emitted by the pool are fetched in chunks.
+4. **Aggregation** — per wallet: total swap count, total cumulative raw volume in token0 and token1.
+5. **Filtering** — only wallets that meet `--min-txs` and `--min-volume` thresholds are included in the output.
+
+### CLI examples
+
+```bash
+# Wallets with ≥ 5 swaps before June 1 2024
+npm run cli -- dex \
+  --pool 0xPoolAddress \
+  --dex v2 \
+  --snapshot-time 2024-06-01T00:00:00Z \
+  --min-txs 5 \
+  --rpc https://ethereum.publicnode.com \
+  -o qualified-traders.csv
+
+# Uniswap V3 pool — minimum 10 swaps and 1 000 token0 raw units volume
+npm run cli -- dex \
+  --pool 0xPoolAddress \
+  --dex v3 \
+  --block 20000000 \
+  --min-txs 10 \
+  --min-volume 1000 \
+  --rpc https://mainnet.base.org \
+  -o airdrop-list.csv
+```
+
+Or run `npm start` and choose **DEX Activity** from the platform menu.
+
+### Options
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-p, --pool` | Pool/pair contract address | required |
+| `-d, --dex` | Event style: `v2` \| `v3` | `v2` |
+| `-r, --rpc` | RPC endpoint URL | `EVM_RPC_URL` from `.env` |
+| `-b, --block` | Snapshot at this block | latest |
+| `--snapshot-time` | Snapshot at this ISO datetime (e.g. `2024-06-01T00:00:00Z`) | — |
+| `--from-block` | Start scanning from this block | auto-detected |
+| `--chunk-size` | Blocks per `getLogs` call | `2000` |
+| `--min-txs` | Minimum swaps to qualify | `1` |
+| `--min-volume` | Minimum raw token0 volume (wei units) to qualify | `0` |
+| `-o, --output` | Output file (`.csv` or `.json`) | `dex-snapshot.csv` |
+
+### Output columns
+
+| Column | Description |
+|--------|-------------|
+| `address` | Wallet address |
+| `swapCount` | Total swaps in the snapshot period |
+| `volumeToken0` | Cumulative raw volume in token0 (wei) |
+| `volumeToken1` | Cumulative raw volume in token1 (wei) |
+
+### Supported DEX styles
+
+| Style | Compatible protocols |
+|-------|----------------------|
+| `v2` | Uniswap V2, SushiSwap, PancakeSwap, Camelot V2, and most V2 forks |
+| `v3` | Uniswap V3, Aerodrome, Camelot V3, and most V3 forks |
+
+> **Volume units** — values are raw on-chain integers (wei). Divide by `10^decimals` to get human-readable amounts. USD normalization requires per-block price data and is not included.

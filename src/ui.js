@@ -6,6 +6,7 @@ const Table = require('cli-table3');
 
 const { snapshotEVM } = require('./evm/index');
 const { snapshotSolana } = require('./solana/index');
+const { snapshotDEX } = require('./dex/index');
 const { writeOutput } = require('./utils/output');
 const progress = require('./utils/progress');
 
@@ -111,6 +112,85 @@ async function promptEVM() {
   ]);
 }
 
+async function promptDEX() {
+  return inquirer.prompt([
+    {
+      type: 'list',
+      name: 'network',
+      message: 'Network:',
+      choices: [
+        { name: 'Ethereum Mainnet', value: 'ethereum' },
+        { name: 'Base',             value: 'base' },
+        { name: 'Polygon',          value: 'polygon' },
+        { name: 'Arbitrum One',     value: 'arbitrum' },
+        { name: 'Optimism',         value: 'optimism' },
+        { name: 'BNB Chain',        value: 'bsc' },
+        new inquirer.Separator(),
+        { name: 'Other EVM Chain',  value: 'other' },
+      ],
+    },
+    {
+      type: 'list',
+      name: 'dex',
+      message: 'DEX event style:',
+      choices: [
+        { name: 'Uniswap V2  (most forks: SushiSwap, PancakeSwap, etc.)', value: 'v2' },
+        { name: 'Uniswap V3  (also Aerodrome, Camelot V3, etc.)',         value: 'v3' },
+      ],
+    },
+    {
+      type: 'input',
+      name: 'pool',
+      message: 'Pool / pair contract address:',
+      validate: v => /^0x[0-9a-fA-F]{40}$/.test(v.trim()) || chalk.red('Enter a valid 0x address (42 hex chars)'),
+      filter: v => v.trim(),
+    },
+    {
+      type: 'input',
+      name: 'rpc',
+      message: 'RPC endpoint URL ' + chalk.dim('(free: publicnode.com · eth.drpc.org  |  free key: alchemy.com):'),
+      default: answers => NETWORK_RPCS[answers.network] || '',
+      validate: v => v.trim().startsWith('http') || chalk.red('Enter a valid HTTP(S) RPC URL'),
+      filter: v => v.trim(),
+    },
+    {
+      type: 'input',
+      name: 'snapshotTime',
+      message: 'Snapshot date/time  ' + chalk.dim('(ISO 8601 e.g. 2024-06-01T00:00:00Z  |  blank = latest block):'),
+      filter: v => v.trim() || '',
+    },
+    {
+      type: 'input',
+      name: 'block',
+      message: 'Or snapshot block number  ' + chalk.dim('(blank = use date above or latest):'),
+      when: a => !a.snapshotTime,
+      filter: v => v.trim() || '',
+    },
+    {
+      type: 'input',
+      name: 'minTxs',
+      message: 'Minimum swap count to qualify:',
+      default: '1',
+      validate: v => (!isNaN(Number(v)) && Number(v) >= 1) || chalk.red('Enter a number ≥ 1'),
+      filter: v => v.trim() || '1',
+    },
+    {
+      type: 'input',
+      name: 'minVolume',
+      message: 'Minimum raw token0 volume  ' + chalk.dim('(in wei/smallest unit, 0 = any):'),
+      default: '0',
+      filter: v => v.trim() || '0',
+    },
+    {
+      type: 'input',
+      name: 'output',
+      message: 'Output file:',
+      default: 'dex-snapshot.csv',
+      filter: v => v.trim() || 'dex-snapshot.csv',
+    },
+  ]);
+}
+
 async function promptSolana() {
   const answers = await inquirer.prompt([
     {
@@ -207,10 +287,15 @@ function showResultsTable(result, type) {
   const top  = result.slice(0, 10);
   const isNFT   = type === 'erc721' || type === 'nft';
   const isMulti = type === 'erc1155';
+  const isDex   = type === 'dex';
 
   let head, colWidths, rows;
 
-  if (isNFT) {
+  if (isDex) {
+    head      = [chalk.cyan('Address'), chalk.cyan('Swaps'), chalk.cyan('Volume (token0 raw)')];
+    colWidths = [46, 8, 24];
+    rows = top.map(r => [r.address, String(r.swapCount), r.volumeToken0]);
+  } else if (isNFT) {
     head      = [chalk.cyan('Address'), chalk.cyan('# Owned'), chalk.cyan('Token IDs (first 5)')];
     colWidths = [46, 9, 30];
     rows = top.map(r => {
@@ -237,7 +322,8 @@ function showResultsTable(result, type) {
   const table = new Table({ head, colWidths, style: { head: [], border: ['dim'] } });
   rows.forEach(r => table.push(r));
 
-  console.log(chalk.bold(`\n  Top ${Math.min(10, result.length)} of ${result.length.toLocaleString()} holders:\n`));
+  const noun = isDex ? 'traders' : 'holders';
+  console.log(chalk.bold(`\n  Top ${Math.min(10, result.length)} of ${result.length.toLocaleString()} ${noun}:\n`));
   console.log(table.toString());
 }
 
@@ -253,11 +339,16 @@ async function main() {
     choices: [
       { name: 'EVM   (Ethereum, Base, Polygon, Arbitrum, Optimism, BSC…)', value: 'evm' },
       { name: 'Solana', value: 'solana' },
+      { name: 'DEX Activity  (swap count + volume snapshot)', value: 'dex' },
     ],
   }]);
 
   console.log();
-  const options = platform === 'evm' ? await promptEVM() : await promptSolana();
+  const options = platform === 'evm'
+    ? await promptEVM()
+    : platform === 'dex'
+      ? await promptDEX()
+      : await promptSolana();
 
   console.log();
   showConfirmation(options, platform);
@@ -282,11 +373,18 @@ async function main() {
 
   let result;
   try {
+    if (platform === 'dex') {
+      const { ethers } = require('ethers');
+      options.provider = new ethers.JsonRpcProvider(options.rpc);
+    }
     result = platform === 'evm'
       ? await snapshotEVM(options)
-      : await snapshotSolana(options);
+      : platform === 'dex'
+        ? await snapshotDEX(options)
+        : await snapshotSolana(options);
 
-    spinner.succeed(chalk.green(`Snapshot complete  ·  ${result.length.toLocaleString()} holders found`));
+    const label = platform === 'dex' ? 'wallets' : 'holders';
+    spinner.succeed(chalk.green(`Snapshot complete  ·  ${result.length.toLocaleString()} ${label} found`));
     progress.clearSpinner();
   } catch (err) {
     spinner.fail(chalk.red(`Failed: ${err.message}`));
@@ -295,7 +393,7 @@ async function main() {
   }
 
   await writeOutput(result, options.output);
-  showResultsTable(result, options.type);
+  showResultsTable(result, platform === 'dex' ? 'dex' : options.type);
   console.log(chalk.green(`  Saved →  ${chalk.bold(options.output)}  (${result.length.toLocaleString()} rows)\n`));
 }
 
